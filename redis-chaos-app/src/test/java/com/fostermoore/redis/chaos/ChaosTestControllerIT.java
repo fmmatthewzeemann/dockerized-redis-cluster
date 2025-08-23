@@ -3,22 +3,36 @@ package com.fostermoore.redis.chaos;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.Order;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureWebMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+
+import java.time.Duration;
+import java.time.Instant;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureWebMvc
 @ActiveProfiles("integration")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class ChaosTestControllerIT {
+
+    private static final Logger logger = LoggerFactory.getLogger(ChaosTestControllerIT.class);
 
     @Autowired
     private MockMvc mockMvc;
@@ -27,18 +41,78 @@ public class ChaosTestControllerIT {
     private ObjectMapper objectMapper;
 
     @BeforeEach
-    void setUp() throws Exception {
-        // Clean up before each test
-        mockMvc.perform(delete("/chaos/cleanup"))
-                .andExpect(status().isOk());
+    void setUp(TestInfo testInfo) throws Exception {
+        logger.info("📋 SETUP: Preparing for test: {}", testInfo.getDisplayName());
+        
+        Instant startTime = Instant.now();
+        
+        try {
+            // Verify cluster health before each test
+            logger.info("SETUP: Checking cluster health...");
+            MvcResult healthResult = mockMvc.perform(get("/chaos/health"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            
+            String healthResponse = healthResult.getResponse().getContentAsString();
+            logger.debug("SETUP: Health check response: {}", healthResponse);
+            
+            // Clean up before each test
+            logger.info("SETUP: Performing pre-test cleanup...");
+            MvcResult cleanupResult = mockMvc.perform(delete("/chaos/cleanup"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            
+            Duration setupTime = Duration.between(startTime, Instant.now());
+            logger.info("SETUP: ✅ Setup completed in {}ms for test: {}", 
+                setupTime.toMillis(), testInfo.getDisplayName());
+                
+        } catch (Exception e) {
+            Duration setupTime = Duration.between(startTime, Instant.now());
+            logger.error("SETUP: ❌ Setup FAILED after {}ms for test: {} - Error: {}", 
+                setupTime.toMillis(), testInfo.getDisplayName(), e.getMessage());
+            throw e;
+        }
     }
 
     @Test
+    @Order(1)
+    @DisplayName("Cluster Health Check API Test")
     void testClusterHealth() throws Exception {
-        mockMvc.perform(get("/chaos/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.clusterState", notNullValue()))
-                .andExpect(jsonPath("$.nodes", notNullValue()));
+        logger.info("🏥 API-TEST: Cluster Health Check - STARTING");
+        
+        Instant startTime = Instant.now();
+        
+        try {
+            MvcResult result = mockMvc.perform(get("/chaos/health"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.healthy", notNullValue()))
+                    .andExpect(jsonPath("$.clusterInfo", notNullValue()))
+                    .andExpect(jsonPath("$.nodes", notNullValue()))
+                    .andExpect(jsonPath("$.nodeCount", notNullValue()))
+                    .andReturn();
+            
+            Duration testTime = Duration.between(startTime, Instant.now());
+            String responseContent = result.getResponse().getContentAsString();
+            
+            logger.info("API-TEST: Health check completed in {}ms", testTime.toMillis());
+            logger.info("API-TEST: Response status: {}", result.getResponse().getStatus());
+            logger.debug("API-TEST: Response body: {}", responseContent);
+            
+            // Parse and log key metrics
+            if (responseContent.contains("\"healthy\":true")) {
+                logger.info("API-TEST: ✅ Cluster is HEALTHY");
+            } else {
+                logger.warn("API-TEST: ⚠️  Cluster health status unclear");
+            }
+            
+            logger.info("✅ API-TEST: Cluster Health Check - COMPLETED");
+            
+        } catch (Exception e) {
+            Duration testTime = Duration.between(startTime, Instant.now());
+            logger.error("❌ API-TEST: Cluster Health Check FAILED after {}ms - Error: {}", 
+                testTime.toMillis(), e.getMessage());
+            throw e;
+        }
     }
 
     @Test

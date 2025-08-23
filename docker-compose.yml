@@ -53,6 +53,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7001
       --cluster-announce-bus-port 17001
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7001", "ping"]
@@ -78,6 +79,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7002
       --cluster-announce-bus-port 17002
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7002", "ping"]
@@ -103,6 +105,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7003
       --cluster-announce-bus-port 17003
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7003", "ping"]
@@ -128,6 +131,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7004
       --cluster-announce-bus-port 17004
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7004", "ping"]
@@ -154,6 +158,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7005
       --cluster-announce-bus-port 17005
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7005", "ping"]
@@ -180,6 +185,7 @@ services:
       --cluster-announce-ip redis.localhost
       --cluster-announce-port 7006
       --cluster-announce-bus-port 17006
+      --cluster-announce-hostname redis.localhost
       --cluster-preferred-endpoint-type hostname
     healthcheck:
       test: ["CMD", "redis-cli", "-p", "7006", "ping"]

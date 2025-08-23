@@ -1,6 +1,8 @@
 package com.fostermoore.redis.chaos.config;
 
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,9 +20,13 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.List;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 @Configuration
 public class RedisConfig {
+
+    private static final Logger logger = LoggerFactory.getLogger(RedisConfig.class);
 
     @Value("${redis.cluster.nodes:localhost:7001,localhost:7002,localhost:7003,localhost:7004,localhost:7005,localhost:7006}")
     private List<String> clusterNodes;
@@ -46,12 +52,41 @@ public class RedisConfig {
     @Bean
     @Primary
     public RedisConnectionFactory redisConnectionFactory() {
+        logger.info("=== Redis Connection Factory Configuration ===");
+        logger.info("Cluster nodes from config: {}", clusterNodes);
+        logger.info("Max redirects: {}", maxRedirects);
+        logger.info("Connection timeout: {}ms", timeout);
+        
+        // Test DNS resolution for each node
+        for (String node : clusterNodes) {
+            String[] parts = node.split(":");
+            String host = parts[0];
+            int port = Integer.parseInt(parts[1]);
+            
+            try {
+                InetAddress address = InetAddress.getByName(host);
+                logger.info("DNS Resolution SUCCESS: {} -> {}", host, address.getHostAddress());
+                
+                // Test socket connectivity
+                try (java.net.Socket socket = new java.net.Socket()) {
+                    socket.connect(new java.net.InetSocketAddress(host, port), 5000);
+                    logger.info("Socket Connection SUCCESS: {}:{}", host, port);
+                } catch (Exception socketEx) {
+                    logger.error("Socket Connection FAILED: {}:{} - {}", host, port, socketEx.getMessage());
+                }
+                
+            } catch (UnknownHostException ex) {
+                logger.error("DNS Resolution FAILED: {} - {}", host, ex.getMessage());
+            }
+        }
+        
         RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(clusterNodes);
         clusterConfig.setMaxRedirects(maxRedirects);
         
         JedisConnectionFactory factory = new JedisConnectionFactory(clusterConfig);
         factory.afterPropertiesSet();
         
+        logger.info("Redis connection factory created successfully");
         return factory;
     }
 
@@ -86,13 +121,37 @@ public class RedisConfig {
 
     @Bean
     public JedisCluster jedisCluster() {
+        logger.info("=== JedisCluster Configuration ===");
+        logger.info("Creating JedisCluster with nodes: {}", clusterNodes);
+        logger.info("Timeout: {}ms, MaxRedirects: {}", timeout, maxRedirects);
+        
         Set<HostAndPort> hostAndPorts = clusterNodes.stream()
                 .map(node -> {
                     String[] hostPort = node.split(":");
-                    return new HostAndPort(hostPort[0], Integer.parseInt(hostPort[1]));
+                    HostAndPort hostAndPortObj = new HostAndPort(hostPort[0], Integer.parseInt(hostPort[1]));
+                    logger.info("Added cluster node: {}", hostAndPortObj);
+                    return hostAndPortObj;
                 })
                 .collect(Collectors.toSet());
-
-        return new JedisCluster(hostAndPorts, timeout, timeout, maxRedirects, jedisPoolConfig());
+        
+        logger.info("Total cluster nodes configured: {}", hostAndPorts.size());
+        
+        try {
+            JedisCluster cluster = new JedisCluster(hostAndPorts, timeout, timeout, maxRedirects, jedisPoolConfig());
+            logger.info("JedisCluster created successfully");
+            
+            // Test the cluster connection immediately
+            try {
+                String pingResult = cluster.ping();
+                logger.info("JedisCluster PING test SUCCESS: {}", pingResult);
+            } catch (Exception pingEx) {
+                logger.error("JedisCluster PING test FAILED: {}", pingEx.getMessage(), pingEx);
+            }
+            
+            return cluster;
+        } catch (Exception ex) {
+            logger.error("JedisCluster creation FAILED: {}", ex.getMessage(), ex);
+            throw ex;
+        }
     }
 }

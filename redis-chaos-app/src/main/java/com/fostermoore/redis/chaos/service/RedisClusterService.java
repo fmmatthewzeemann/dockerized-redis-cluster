@@ -152,18 +152,34 @@ public class RedisClusterService {
     }
 
     public Map<String, String> getClusterInfo() {
+        logger.debug("=== Getting cluster info ===");
         try {
             // Get any connection from the cluster and execute CLUSTER INFO
             Map<String, redis.clients.jedis.ConnectionPool> clusterNodes = jedisCluster.getClusterNodes();
+            logger.debug("Available cluster nodes from JedisCluster: {}", clusterNodes.size());
+            
             if (clusterNodes.isEmpty()) {
+                logger.error("No cluster nodes available in JedisCluster");
                 throw new RuntimeException("No cluster nodes available");
             }
             
+            // Log all available cluster nodes
+            for (Map.Entry<String, redis.clients.jedis.ConnectionPool> entry : clusterNodes.entrySet()) {
+                logger.debug("Cluster node available: {}", entry.getKey());
+            }
+            
             redis.clients.jedis.ConnectionPool connectionPool = clusterNodes.values().iterator().next();
+            logger.debug("Selected connection pool: {}", connectionPool);
+            
             try (redis.clients.jedis.Connection connection = connectionPool.getResource()) {
+                logger.debug("Got connection from pool: {}", connection);
+                
                 // Execute CLUSTER INFO command directly on the connection
+                logger.debug("Sending CLUSTER INFO command...");
                 connection.sendCommand(redis.clients.jedis.Protocol.Command.CLUSTER, "INFO");
                 String clusterInfoResponse = connection.getStatusCodeReply();
+                logger.debug("CLUSTER INFO response received: {}", clusterInfoResponse);
+                
                 Map<String, String> infoMap = new HashMap<>();
                 
                 String[] lines = clusterInfoResponse.split("\r?\n");
@@ -171,14 +187,28 @@ public class RedisClusterService {
                     if (line.contains(":")) {
                         String[] parts = line.split(":", 2);
                         infoMap.put(parts[0].trim(), parts[1].trim());
+                        logger.debug("Parsed cluster info: {} = {}", parts[0].trim(), parts[1].trim());
                     }
                 }
                 
-                logger.debug("Successfully retrieved cluster info");
+                logger.info("Successfully retrieved cluster info. State: {}, Nodes: {}", 
+                    infoMap.get("cluster_state"), infoMap.get("cluster_known_nodes"));
                 return infoMap;
             }
         } catch (Exception e) {
-            logger.error("Failed to get cluster info - {}", e.getMessage());
+            logger.error("Failed to get cluster info - {} - {}", e.getClass().getSimpleName(), e.getMessage(), e);
+            
+            // Log the JedisCluster state
+            try {
+                Map<String, redis.clients.jedis.ConnectionPool> nodes = jedisCluster.getClusterNodes();
+                logger.error("JedisCluster state: {} nodes available", nodes.size());
+                for (String nodeKey : nodes.keySet()) {
+                    logger.error("Available node: {}", nodeKey);
+                }
+            } catch (Exception stateEx) {
+                logger.error("Could not get JedisCluster state: {}", stateEx.getMessage());
+            }
+            
             // Return a fallback map with basic info only on error
             Map<String, String> fallbackMap = new HashMap<>();
             fallbackMap.put("cluster_state", "fail");
