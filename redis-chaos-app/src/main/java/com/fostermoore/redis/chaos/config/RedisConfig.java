@@ -49,8 +49,8 @@ public class RedisConfig {
         RedisClusterConfiguration clusterConfig = new RedisClusterConfiguration(clusterNodes);
         clusterConfig.setMaxRedirects(maxRedirects);
         
-        JedisConnectionFactory factory = new JedisConnectionFactory(clusterConfig, jedisPoolConfig());
-        factory.setTimeout(Duration.ofMillis(timeout));
+        JedisConnectionFactory factory = new JedisConnectionFactory(clusterConfig);
+        factory.afterPropertiesSet();
         
         return factory;
     }

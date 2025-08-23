@@ -4,7 +4,7 @@ echo "🔍 Redis Cluster Status Check"
 echo "=============================="
 
 # Default connection
-REDIS_HOST=${REDIS_HOST:-10.0.0.11}
+REDIS_HOST=${REDIS_HOST:-redis.localhost}
 REDIS_PORT=${REDIS_PORT:-7001}
 
 # Check if cluster is reachable

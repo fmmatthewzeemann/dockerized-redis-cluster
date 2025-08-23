@@ -4,7 +4,7 @@ set -e
 echo "🚀 Starting Redis Cluster initialization..."
 
 # Default values
-CLUSTER_NODES=${CLUSTER_NODES:-"10.0.0.11:7001 10.0.0.12:7002 10.0.0.13:7003 10.0.0.14:7004 10.0.0.15:7005 10.0.0.16:7006"}
+CLUSTER_NODES=${CLUSTER_NODES:-"redis.localhost:7001 redis.localhost:7002 redis.localhost:7003 redis.localhost:7004 redis.localhost:7005 redis.localhost:7006"}
 REPLICAS_PER_MASTER=${REPLICAS_PER_MASTER:-1}
 MAX_RETRIES=30
 RETRY_INTERVAL=2

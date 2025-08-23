@@ -16,10 +16,11 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
+import java.util.stream.Collectors;
 
 @SpringBootTest
 @TestPropertySource(properties = {
-    "redis.cluster.nodes=localhost:7001,localhost:7002,localhost:7003,localhost:7004,localhost:7005,localhost:7006",
+    "redis.cluster.nodes=redis.localhost:7001,redis.localhost:7002,redis.localhost:7003,redis.localhost:7004,redis.localhost:7005,redis.localhost:7006",
     "redis.cluster.timeout=5000",
     "redis.cluster.max-redirects=5"
 })
@@ -286,7 +287,7 @@ class ChaosMonkeyIT {
                     logger.warn("Failover test failure for key {}: {}", key, e.getMessage());
                 }
             }))
-            .toList();
+            .collect(Collectors.toList());
         
         futures.forEach(future -> {
             try {

@@ -6,12 +6,12 @@ spring:
     redis:
       cluster:
         nodes:
-          - localhost:7001
-          - localhost:7002
-          - localhost:7003
-          - localhost:7004
-          - localhost:7005
-          - localhost:7006
+          - redis.localhost:7001
+          - redis.localhost:7002
+          - redis.localhost:7003
+          - redis.localhost:7004
+          - redis.localhost:7005
+          - redis.localhost:7006
         max-redirects: 3
       timeout: 5s
       jedis:
@@ -51,7 +51,7 @@ management:
 
 redis:
   cluster:
-    nodes: localhost:7001,localhost:7002,localhost:7003,localhost:7004,localhost:7005,localhost:7006
+    nodes: redis.localhost:7001,localhost:7002,redis.localhost:7003,redis.localhost:7004,redis.localhost:7005,redis.localhost:7006
     max-redirects: 3
     timeout: 5000
     pool:
@@ -69,9 +69,9 @@ spring:
     redis:
       cluster:
         nodes:
-          - localhost:7001
-          - localhost:7002
-          - localhost:7003
+          - redis.localhost:7001
+          - redis.localhost:7002
+          - redis.localhost:7003
 
 logging:
   level:
@@ -87,12 +87,12 @@ spring:
     redis:
       cluster:
         nodes:
-          - localhost:7001
-          - localhost:7002
-          - localhost:7003
-          - localhost:7004
-          - localhost:7005
-          - localhost:7006
+          - redis.localhost:7001
+          - redis.localhost:7002
+          - redis.localhost:7003
+          - redis.localhost:7004
+          - redis.localhost:7005
+          - redis.localhost:7006
 
 logging:
   level:

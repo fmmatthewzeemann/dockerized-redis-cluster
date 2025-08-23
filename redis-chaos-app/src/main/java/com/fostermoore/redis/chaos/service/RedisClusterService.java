@@ -1,4 +1,4 @@
-i  have  just  forked to repot to  git@github.com:fmmatthewzeemann/dockerized-redis-cluster.gitpackage com.fostermoore.redis.chaos.service;
+package com.fostermoore.redis.chaos.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -153,63 +153,92 @@ public class RedisClusterService {
 
     public Map<String, String> getClusterInfo() {
         try {
-            String clusterInfo = jedisCluster.clusterInfo();
-            Map<String, String> infoMap = new HashMap<>();
-            
-            String[] lines = clusterInfo.split("\n");
-            for (String line : lines) {
-                if (line.contains(":")) {
-                    String[] parts = line.split(":", 2);
-                    infoMap.put(parts[0].trim(), parts[1].trim());
-                }
+            // Get any connection from the cluster and execute CLUSTER INFO
+            Map<String, redis.clients.jedis.ConnectionPool> clusterNodes = jedisCluster.getClusterNodes();
+            if (clusterNodes.isEmpty()) {
+                throw new RuntimeException("No cluster nodes available");
             }
             
-            logger.debug("Successfully retrieved cluster info");
-            return infoMap;
+            redis.clients.jedis.ConnectionPool connectionPool = clusterNodes.values().iterator().next();
+            try (redis.clients.jedis.Connection connection = connectionPool.getResource()) {
+                // Execute CLUSTER INFO command directly on the connection
+                connection.sendCommand(redis.clients.jedis.Protocol.Command.CLUSTER, "INFO");
+                String clusterInfoResponse = connection.getStatusCodeReply();
+                Map<String, String> infoMap = new HashMap<>();
+                
+                String[] lines = clusterInfoResponse.split("\r?\n");
+                for (String line : lines) {
+                    if (line.contains(":")) {
+                        String[] parts = line.split(":", 2);
+                        infoMap.put(parts[0].trim(), parts[1].trim());
+                    }
+                }
+                
+                logger.debug("Successfully retrieved cluster info");
+                return infoMap;
+            }
         } catch (Exception e) {
             logger.error("Failed to get cluster info - {}", e.getMessage());
-            throw e;
+            // Return a fallback map with basic info only on error
+            Map<String, String> fallbackMap = new HashMap<>();
+            fallbackMap.put("cluster_state", "fail");
+            fallbackMap.put("cluster_slots_assigned", "0");
+            fallbackMap.put("cluster_known_nodes", "0");
+            fallbackMap.put("error", e.getMessage());
+            return fallbackMap;
         }
     }
 
     public List<Map<String, Object>> getClusterNodes() {
         try {
-            String clusterNodes = jedisCluster.clusterNodes();
-            List<Map<String, Object>> nodesList = new ArrayList<>();
-            
-            String[] lines = clusterNodes.split("\n");
-            for (String line : lines) {
-                if (!line.trim().isEmpty()) {
-                    String[] parts = line.split(" ");
-                    if (parts.length >= 8) {
-                        Map<String, Object> nodeInfo = new HashMap<>();
-                        nodeInfo.put("id", parts[0]);
-                        nodeInfo.put("address", parts[1]);
-                        nodeInfo.put("flags", parts[2]);
-                        nodeInfo.put("master", parts[3]);
-                        nodeInfo.put("ping_sent", parts[4]);
-                        nodeInfo.put("pong_recv", parts[5]);
-                        nodeInfo.put("config_epoch", parts[6]);
-                        nodeInfo.put("link_state", parts[7]);
-                        
-                        if (parts.length > 8) {
-                            StringBuilder slots = new StringBuilder();
-                            for (int i = 8; i < parts.length; i++) {
-                                slots.append(parts[i]).append(" ");
-                            }
-                            nodeInfo.put("slots", slots.toString().trim());
-                        }
-                        
-                        nodesList.add(nodeInfo);
-                    }
-                }
+            // Get any connection from the cluster and execute CLUSTER NODES
+            Map<String, redis.clients.jedis.ConnectionPool> clusterNodes = jedisCluster.getClusterNodes();
+            if (clusterNodes.isEmpty()) {
+                throw new RuntimeException("No cluster nodes available");
             }
             
-            logger.debug("Successfully retrieved cluster nodes info");
-            return nodesList;
+            redis.clients.jedis.ConnectionPool connectionPool = clusterNodes.values().iterator().next();
+            try (redis.clients.jedis.Connection connection = connectionPool.getResource()) {
+                // Execute CLUSTER NODES command directly on the connection
+                connection.sendCommand(redis.clients.jedis.Protocol.Command.CLUSTER, "NODES");
+                String clusterNodesResponse = connection.getStatusCodeReply();
+                List<Map<String, Object>> nodesList = new ArrayList<>();
+                
+                String[] lines = clusterNodesResponse.split("\r?\n");
+                for (String line : lines) {
+                    if (!line.trim().isEmpty()) {
+                        String[] parts = line.split("\\s+");
+                        if (parts.length >= 8) {
+                            Map<String, Object> nodeInfo = new HashMap<>();
+                            nodeInfo.put("id", parts[0]);
+                            nodeInfo.put("address", parts[1]);
+                            nodeInfo.put("flags", parts[2]);
+                            nodeInfo.put("master", parts[3]);
+                            nodeInfo.put("ping_sent", parts[4]);
+                            nodeInfo.put("pong_recv", parts[5]);
+                            nodeInfo.put("config_epoch", parts[6]);
+                            nodeInfo.put("link_state", parts[7]);
+                            
+                            if (parts.length > 8) {
+                                StringBuilder slots = new StringBuilder();
+                                for (int i = 8; i < parts.length; i++) {
+                                    slots.append(parts[i]).append(" ");
+                                }
+                                nodeInfo.put("slots", slots.toString().trim());
+                            }
+                            
+                            nodesList.add(nodeInfo);
+                        }
+                    }
+                }
+                
+                logger.debug("Successfully retrieved cluster nodes info");
+                return nodesList;
+            }
         } catch (Exception e) {
             logger.error("Failed to get cluster nodes - {}", e.getMessage());
-            throw e;
+            // Return empty list as fallback only on error
+            return new ArrayList<>();
         }
     }
 

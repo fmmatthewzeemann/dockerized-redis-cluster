@@ -21,7 +21,7 @@ This is a **fully automated Redis OSS cluster setup** using Docker Compose with 
 
 ### Network Architecture
 
-- Static IP assignments: 10.0.0.11-16 for Redis nodes, 10.0.0.20 for app container
+- Static IP assignments: redis.localhost-16 for Redis nodes, 10.0.0.20 for app container
 - Port mapping: 7001-7006 for external access to Redis nodes
 - Internal cluster communication via node IDs and internal network
 
@@ -136,7 +136,7 @@ To expand the cluster:
 
 ```bash
 # Manual cluster creation if initialization fails
-docker-compose exec redis-1 redis-cli -p 7001 --cluster create 10.0.0.11:7001 10.0.0.12:7002 10.0.0.13:7003 10.0.0.14:7004 10.0.0.15:7005 10.0.0.16:7006 --cluster-replicas 1 --cluster-yes
+docker-compose exec redis-1 redis-cli -p 7001 --cluster create redis.localhost:7001 redis.localhost:7002 redis.localhost:7003 redis.localhost:7004 redis.localhost:7005 redis.localhost:7006 --cluster-replicas 1 --cluster-yes
 
 # Check cluster slots assignment
 docker-compose exec redis-1 redis-cli -p 7001 cluster slots

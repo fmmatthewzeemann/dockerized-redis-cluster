@@ -1,2 +1,13 @@
 .env
 logs/*
+
+.idea
+*.iml
+*.version.properties
+*.log
+.clipboards
+.preferences
+target/
+.repo
+.DS_Store
+tmp/

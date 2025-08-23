@@ -5,9 +5,9 @@ import string
 
 # Correct startup nodes based on docker-compose configuration
 startup_nodes = [
-    ClusterNode("10.0.0.11", 7001),
-    ClusterNode("10.0.0.12", 7002),
-    ClusterNode("10.0.0.13", 7003)
+    ClusterNode("redis.localhost", 7001),
+    ClusterNode("redis.localhost", 7002),
+    ClusterNode("redis.localhost", 7003)
 ]
 
 print("Connecting to Redis Cluster...")

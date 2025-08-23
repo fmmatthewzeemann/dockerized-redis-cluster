@@ -69,7 +69,7 @@ PYTHON_VERSION=3.11-alpine
 
 # Cluster configuration
 REPLICAS_PER_MASTER=1
-CLUSTER_NODES=10.0.0.11:7001 10.0.0.12:7002 10.0.0.13:7003 10.0.0.14:7004 10.0.0.15:7005 10.0.0.16:7006
+CLUSTER_NODES=redis.localhost:7001 redis.localhost:7002 redis.localhost:7003 redis.localhost:7004 redis.localhost:7005 redis.localhost:7006
 
 # Active profiles
 COMPOSE_PROFILES=full,init,app
@@ -188,7 +188,7 @@ docker-compose exec app pip list | grep redis
 
 If automatic initialization fails, you can create the cluster manually:
 ```bash
-docker-compose exec redis-1 redis-cli -p 7001 --cluster create 10.0.0.11:7001 10.0.0.12:7002 10.0.0.13:7003 10.0.0.14:7004 10.0.0.15:7005 10.0.0.16:7006 --cluster-replicas 1 --cluster-yes
+docker-compose exec redis-1 redis-cli -p 7001 --cluster create redis.localhost:7001 redis.localhost:7002 redis.localhost:7003 redis.localhost:7004 redis.localhost:7005 redis.localhost:7006 --cluster-replicas 1 --cluster-yes
 ```
 
 ### Reset Everything
