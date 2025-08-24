@@ -1,315 +1,394 @@
 package com.fostermoore.redis.chaos;
 
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.ResponseEntity;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fostermoore.redis.chaos.service.ChaosOrchestrator;
+import com.fostermoore.redis.chaos.service.RedisClusterService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Profile;
 
-import java.util.Map;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Scanner;
 
 /**
- * Manual test runner for chaos testing scenarios
- * Run this class to interactively test various chaos scenarios
+ * Manual Chaos Test Runner - Interactive tool for running chaos engineering tests
+ * 
+ * This class provides a command-line interface for manually executing various
+ * chaos engineering scenarios to test Redis cluster resilience.
+ * 
+ * Usage: Run with profile 'manual-chaos'
+ * mvn spring-boot:run -Dspring-boot.run.profiles=manual-chaos
  */
-public class ManualChaosTestRunner {
+@SpringBootApplication
+@Profile("manual-chaos")
+public class ManualChaosTestRunner implements CommandLineRunner {
+
+    private static final Logger logger = LoggerFactory.getLogger(ManualChaosTestRunner.class);
     
-    private static final String BASE_URL = "http://localhost:8080/chaos";
-    private static final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private ChaosOrchestrator chaosOrchestrator;
     
+    @Autowired
+    private RedisClusterService redisService;
+    
+    private final ObjectMapper objectMapper;
+    private final Scanner scanner;
+    
+    public ManualChaosTestRunner() {
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        this.scanner = new Scanner(System.in);
+    }
+
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+        System.setProperty("spring.profiles.active", "manual-chaos");
+        SpringApplication.run(ManualChaosTestRunner.class, args);
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
+        logger.info("🎯 Manual Chaos Test Runner - Starting Interactive Mode");
+        logger.info("====================================================");
         
-        System.out.println("🔥 Redis Chaos Monkey Test Runner 🔥");
-        System.out.println("====================================");
-        System.out.println("Make sure your Redis cluster and Spring Boot app are running!");
-        System.out.println("Press ENTER to continue...");
-        scanner.nextLine();
+        // Initial health check
+        if (!performInitialHealthCheck()) {
+            logger.error("❌ Initial health check failed. Please ensure Redis cluster is running.");
+            return;
+        }
+        
+        showWelcomeMessage();
         
         boolean running = true;
         while (running) {
-            printMenu();
-            String choice = scanner.nextLine();
+            showMainMenu();
+            String choice = getUserInput("\nEnter your choice (1-9, q to quit): ");
             
-            switch (choice) {
+            switch (choice.toLowerCase()) {
                 case "1":
-                    testClusterHealth();
+                    runLatencyInjectionTest();
                     break;
                 case "2":
-                    testLightPerformance();
+                    runExceptionInjectionTest();
                     break;
                 case "3":
-                    testHeavyPerformance();
+                    runApplicationCrashTest();
                     break;
                 case "4":
-                    testStressTest();
+                    runResourceSaturationTest();
                     break;
                 case "5":
-                    testFailoverScenario();
+                    runDiskExhaustionTest();
                     break;
                 case "6":
-                    testDataIntegrity();
+                    runClockManipulationTest();
                     break;
                 case "7":
-                    testMemoryHandling();
+                    runNodeFailureTest();
                     break;
                 case "8":
-                    testConcurrentAccess();
+                    runComprehensiveChaosScenario();
                     break;
                 case "9":
-                    runFullChaosScenario();
+                    showClusterStatus();
                     break;
-                case "10":
-                    cleanup();
-                    break;
-                case "0":
+                case "q":
+                case "quit":
+                case "exit":
                     running = false;
                     break;
                 default:
-                    System.out.println("Invalid choice. Please try again.");
+                    logger.warn("Invalid choice: {}. Please try again.", choice);
             }
             
             if (running) {
-                System.out.println("\nPress ENTER to continue...");
-                scanner.nextLine();
+                getUserInput("\nPress Enter to continue...");
             }
         }
         
-        scanner.close();
-        System.out.println("Thanks for using Redis Chaos Monkey Test Runner! 🐵");
+        logger.info("👋 Manual Chaos Test Runner - Exiting");
     }
     
-    private static void printMenu() {
-        System.out.println("\n" + "=".repeat(50));
-        System.out.println("Choose a chaos test scenario:");
-        System.out.println("1. Cluster Health Check");
-        System.out.println("2. Light Performance Test (250 ops, 5 threads)");
-        System.out.println("3. Heavy Performance Test (2000 ops, 20 threads)");
-        System.out.println("4. Stress Test (1000 ops, 15 concurrent users)");
-        System.out.println("5. Failover Scenario (300 keys, 5 retry attempts)");
-        System.out.println("6. Data Integrity Test (500 records)");
-        System.out.println("7. Memory Handling Test (50 large objects)");
-        System.out.println("8. Concurrent Access Test (20 threads, 50 ops each)");
-        System.out.println("9. Full Chaos Scenario (runs multiple tests)");
-        System.out.println("10. Cleanup Test Data");
-        System.out.println("0. Exit");
-        System.out.print("Enter your choice: ");
-    }
-    
-    private static void testClusterHealth() {
-        System.out.println("\n🏥 Running Cluster Health Check...");
+    private boolean performInitialHealthCheck() {
         try {
-            ResponseEntity<Map> response = restTemplate.getForEntity(BASE_URL + "/health", Map.class);
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Cluster Health: " + body.get("clusterState"));
-                System.out.println("📊 Nodes: " + body.get("nodes"));
-                System.out.println("✅ Health check completed successfully!");
+            logger.info("🔍 Performing initial health check...");
+            boolean healthy = redisService.isClusterHealthy();
+            if (healthy) {
+                var clusterInfo = redisService.getClusterInfo();
+                var nodes = redisService.getClusterNodes();
+                logger.info("✅ Cluster is healthy - {} nodes, state: {}", 
+                    nodes.size(), clusterInfo.get("cluster_state"));
+                return true;
             } else {
-                System.out.println("❌ Health check failed with status: " + response.getStatusCode());
+                logger.error("❌ Cluster is not healthy");
+                return false;
             }
         } catch (Exception e) {
-            System.out.println("❌ Error during health check: " + e.getMessage());
+            logger.error("❌ Health check failed: {}", e.getMessage(), e);
+            return false;
         }
     }
     
-    private static void testLightPerformance() {
-        System.out.println("\n🚀 Running Light Performance Test...");
-        runPerformanceTest(250, 5, false);
+    private void showWelcomeMessage() {
+        logger.info("\n🚀 Welcome to the Manual Chaos Test Runner!");
+        logger.info("This tool allows you to manually execute chaos engineering tests");
+        logger.info("against your Redis cluster to validate resilience and fault tolerance.");
+        logger.info("\n⚠️  WARNING: These tests may cause temporary service disruption.");
+        logger.info("Only run in development/testing environments!");
     }
     
-    private static void testHeavyPerformance() {
-        System.out.println("\n🚀 Running Heavy Performance Test...");
-        runPerformanceTest(2000, 20, true);
+    private void showMainMenu() {
+        System.out.println("\n" + "=".repeat(60));
+        System.out.println("🎯 MANUAL CHAOS TEST MENU");
+        System.out.println("=".repeat(60));
+        System.out.println("1. 🐌 Latency Injection Test");
+        System.out.println("2. 💥 Exception Injection Test");
+        System.out.println("3. 💀 Application Crash Test");
+        System.out.println("4. 🔥 Resource Saturation Test (CPU/Memory)");
+        System.out.println("5. 💾 Disk Space Exhaustion Test");
+        System.out.println("6. ⏰ Clock Manipulation Test");
+        System.out.println("7. 🔌 Node Failure Test");
+        System.out.println("8. 🌪️  Comprehensive Chaos Scenario");
+        System.out.println("9. 📊 Show Cluster Status");
+        System.out.println("q. 👋 Quit");
+        System.out.println("=".repeat(60));
     }
     
-    private static void runPerformanceTest(int operations, int threads, boolean async) {
+    private String getUserInput(String prompt) {
+        System.out.print(prompt);
+        return scanner.nextLine().trim();
+    }
+    
+    private void runLatencyInjectionTest() {
+        logger.info("🐌 MANUAL CHAOS: Starting Latency Injection Test");
+        
+        String durationStr = getUserInput("Enter latency duration in seconds (default: 30): ");
+        int duration = parseIntWithDefault(durationStr, 30);
+        
+        String latencyStr = getUserInput("Enter latency amount in milliseconds (default: 500): ");
+        int latencyMs = parseIntWithDefault(latencyStr, 500);
+        
+        String probabilityStr = getUserInput("Enter injection probability 0.0-1.0 (default: 0.3): ");
+        double probability = parseDoubleWithDefault(probabilityStr, 0.3);
+        
         try {
-            String url = BASE_URL + "/performance-test?operations=" + operations + 
-                        "&threads=" + threads + "&async=" + async;
-            
-            System.out.println("🔄 Testing " + operations + " operations with " + threads + " threads...");
-            long startTime = System.currentTimeMillis();
-            
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            long endTime = System.currentTimeMillis();
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Test completed in " + (endTime - startTime) + "ms");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateLatencyInjection(duration, latencyMs, probability);
+            logChaosResult("Latency Injection", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during performance test: " + e.getMessage());
+            logger.error("❌ Latency injection test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void testStressTest() {
-        System.out.println("\n⚡ Running Stress Test...");
+    private void runExceptionInjectionTest() {
+        logger.info("💥 MANUAL CHAOS: Starting Exception Injection Test");
+        
+        String durationStr = getUserInput("Enter test duration in seconds (default: 30): ");
+        int duration = parseIntWithDefault(durationStr, 30);
+        
+        String probabilityStr = getUserInput("Enter exception probability 0.0-1.0 (default: 0.2): ");
+        double probability = parseDoubleWithDefault(probabilityStr, 0.2);
+        
+        String exceptionType = getUserInput("Enter exception type (RuntimeException/IOException/default): ");
+        if (exceptionType.isEmpty()) {
+            exceptionType = "RuntimeException";
+        }
+        
         try {
-            String url = BASE_URL + "/stress-test?operations=1000&concurrentUsers=15";
-            
-            System.out.println("🔄 Stress testing with 15 concurrent users...");
-            long startTime = System.currentTimeMillis();
-            
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            long endTime = System.currentTimeMillis();
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Stress test completed in " + (endTime - startTime) + "ms");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Stress test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateExceptionInjection(duration, probability, exceptionType);
+            logChaosResult("Exception Injection", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during stress test: " + e.getMessage());
+            logger.error("❌ Exception injection test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void testFailoverScenario() {
-        System.out.println("\n🔄 Running Failover Scenario Test...");
+    private void runApplicationCrashTest() {
+        logger.info("💀 MANUAL CHAOS: Starting Application Crash Test");
+        
+        String confirm = getUserInput("⚠️  This will attempt to crash the application! Continue? (yes/no): ");
+        if (!confirm.equalsIgnoreCase("yes")) {
+            logger.info("Application crash test cancelled by user");
+            return;
+        }
+        
+        String delayStr = getUserInput("Enter delay before crash in seconds (default: 5): ");
+        int delay = parseIntWithDefault(delayStr, 5);
+        
         try {
-            String url = BASE_URL + "/failover-test?keyCount=300&retryAttempts=5";
-            
-            System.out.println("🔄 Testing failover with 300 keys and 5 retry attempts...");
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Failover test completed successfully!");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Failover test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateApplicationCrash(delay);
+            logChaosResult("Application Crash", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during failover test: " + e.getMessage());
+            logger.error("❌ Application crash test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void testDataIntegrity() {
-        System.out.println("\n🔍 Running Data Integrity Test...");
+    private void runResourceSaturationTest() {
+        logger.info("🔥 MANUAL CHAOS: Starting Resource Saturation Test");
+        
+        String typeChoice = getUserInput("Select resource type (1=CPU, 2=Memory, 3=Both, default=3): ");
+        String resourceType = "both";
+        switch (typeChoice) {
+            case "1": resourceType = "cpu"; break;
+            case "2": resourceType = "memory"; break;
+            default: resourceType = "both"; break;
+        }
+        
+        String durationStr = getUserInput("Enter test duration in seconds (default: 60): ");
+        int duration = parseIntWithDefault(durationStr, 60);
+        
+        String intensityStr = getUserInput("Enter intensity percentage 1-100 (default: 80): ");
+        int intensity = parseIntWithDefault(intensityStr, 80);
+        
         try {
-            String url = BASE_URL + "/data-integrity-test?recordCount=500";
-            
-            System.out.println("🔄 Testing data integrity with 500 records...");
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Data integrity test completed!");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Data integrity test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateResourceSaturation(resourceType, duration, intensity);
+            logChaosResult("Resource Saturation", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during data integrity test: " + e.getMessage());
+            logger.error("❌ Resource saturation test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void testMemoryHandling() {
-        System.out.println("\n💾 Running Memory Handling Test...");
+    private void runDiskExhaustionTest() {
+        logger.info("💾 MANUAL CHAOS: Starting Disk Space Exhaustion Test");
+        
+        String targetSizeStr = getUserInput("Enter target fill size in MB (default: 100): ");
+        int targetSizeMB = parseIntWithDefault(targetSizeStr, 100);
+        
+        String pathInput = getUserInput("Enter target path (default: /tmp): ");
+        String targetPath = pathInput.isEmpty() ? "/tmp" : pathInput;
+        
         try {
-            String url = BASE_URL + "/memory-test?largeObjectCount=50&objectSizeBytes=20480";
-            
-            System.out.println("🔄 Testing memory handling with 50 large objects (20KB each)...");
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Memory handling test completed!");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Memory handling test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateDiskExhaustion(targetPath, targetSizeMB);
+            logChaosResult("Disk Exhaustion", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during memory test: " + e.getMessage());
+            logger.error("❌ Disk exhaustion test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void testConcurrentAccess() {
-        System.out.println("\n🔀 Running Concurrent Access Test...");
+    private void runClockManipulationTest() {
+        logger.info("⏰ MANUAL CHAOS: Starting Clock Manipulation Test");
+        
+        String offsetStr = getUserInput("Enter time offset in minutes (+/- values, default: +60): ");
+        int offsetMinutes = parseIntWithDefault(offsetStr, 60);
+        
+        String durationStr = getUserInput("Enter test duration in seconds (default: 30): ");
+        int duration = parseIntWithDefault(durationStr, 30);
+        
         try {
-            String url = BASE_URL + "/concurrent-access-test?threadCount=20&operationsPerThread=50";
-            
-            System.out.println("🔄 Testing concurrent access with 20 threads, 50 operations each...");
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, null, Map.class);
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                Map<String, Object> body = response.getBody();
-                System.out.println("✅ Concurrent access test completed!");
-                System.out.println("📊 Results: " + body);
-            } else {
-                System.out.println("❌ Concurrent access test failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateClockManipulation(offsetMinutes, duration);
+            logChaosResult("Clock Manipulation", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during concurrent access test: " + e.getMessage());
+            logger.error("❌ Clock manipulation test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void runFullChaosScenario() {
-        System.out.println("\n🔥 Running Full Chaos Scenario...");
-        System.out.println("This will run multiple tests in sequence. It may take several minutes...");
+    private void runNodeFailureTest() {
+        logger.info("🔌 MANUAL CHAOS: Starting Node Failure Test");
         
-        // Run a comprehensive chaos scenario
-        testClusterHealth();
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
+        String nodeId = getUserInput("Enter node to target (default: redis-1): ");
+        if (nodeId.isEmpty()) {
+            nodeId = "redis-1";
+        }
         
-        runPerformanceTest(500, 10, true);
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
+        String durationStr = getUserInput("Enter outage duration in seconds (default: 10): ");
+        int duration = parseIntWithDefault(durationStr, 10);
         
-        testStressTest();
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
-        
-        testFailoverScenario();
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
-        
-        testDataIntegrity();
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
-        
-        testMemoryHandling();
-        System.out.println("\n⏳ Waiting 2 seconds...");
-        sleep(2000);
-        
-        testConcurrentAccess();
-        
-        System.out.println("\n🎉 Full Chaos Scenario completed!");
-        testClusterHealth(); // Final health check
-    }
-    
-    private static void cleanup() {
-        System.out.println("\n🧹 Cleaning up test data...");
         try {
-            ResponseEntity<String> response = restTemplate.exchange(
-                BASE_URL + "/cleanup", 
-                org.springframework.http.HttpMethod.DELETE, 
-                null, 
-                String.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                System.out.println("✅ Cleanup completed successfully!");
-                System.out.println("📊 Response: " + response.getBody());
-            } else {
-                System.out.println("❌ Cleanup failed with status: " + response.getStatusCode());
-            }
+            var result = chaosOrchestrator.simulateNodeFailure(nodeId, Duration.ofSeconds(duration));
+            logChaosResult("Node Failure", result);
         } catch (Exception e) {
-            System.out.println("❌ Error during cleanup: " + e.getMessage());
+            logger.error("❌ Node failure test failed: {}", e.getMessage(), e);
         }
     }
     
-    private static void sleep(long ms) {
+    private void runComprehensiveChaosScenario() {
+        logger.info("🌪️  MANUAL CHAOS: Starting Comprehensive Chaos Scenario");
+        
+        String confirm = getUserInput("⚠️  This will run multiple chaos tests sequentially! Continue? (yes/no): ");
+        if (!confirm.equalsIgnoreCase("yes")) {
+            logger.info("Comprehensive chaos scenario cancelled by user");
+            return;
+        }
+        
         try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            var result = chaosOrchestrator.runComprehensiveChaosScenario();
+            logChaosResult("Comprehensive Chaos Scenario", result);
+        } catch (Exception e) {
+            logger.error("❌ Comprehensive chaos scenario failed: {}", e.getMessage(), e);
+        }
+    }
+    
+    private void showClusterStatus() {
+        logger.info("📊 MANUAL CHAOS: Showing Current Cluster Status");
+        
+        try {
+            boolean healthy = redisService.isClusterHealthy();
+            var clusterInfo = redisService.getClusterInfo();
+            var nodes = redisService.getClusterNodes();
+            
+            System.out.println("\n" + "=".repeat(50));
+            System.out.println("📊 REDIS CLUSTER STATUS");
+            System.out.println("=".repeat(50));
+            System.out.println("Overall Health: " + (healthy ? "✅ HEALTHY" : "❌ UNHEALTHY"));
+            System.out.println("Cluster State: " + clusterInfo.get("cluster_state"));
+            System.out.println("Known Nodes: " + clusterInfo.get("cluster_known_nodes"));
+            System.out.println("Slots Assigned: " + clusterInfo.get("cluster_slots_assigned"));
+            System.out.println("Active Nodes: " + nodes.size());
+            
+            System.out.println("\nNode Details:");
+            for (int i = 0; i < nodes.size(); i++) {
+                var node = nodes.get(i);
+                System.out.printf("  Node %d: %s [%s] - %s%n", 
+                    i + 1, node.get("address"), node.get("flags"), node.get("link_state"));
+            }
+            System.out.println("=".repeat(50));
+            
+        } catch (Exception e) {
+            logger.error("❌ Failed to retrieve cluster status: {}", e.getMessage(), e);
+        }
+    }
+    
+    private void logChaosResult(String testName, Object result) {
+        try {
+            logger.info("📋 {} Test Results:", testName);
+            logger.info("=".repeat(60));
+            
+            String jsonResult = objectMapper.writeValueAsString(result);
+            System.out.println(jsonResult);
+            
+            logger.info("=".repeat(60));
+        } catch (Exception e) {
+            logger.error("Failed to serialize chaos result: {}", e.getMessage());
+            logger.info("Raw result: {}", result.toString());
+        }
+    }
+    
+    private int parseIntWithDefault(String value, int defaultValue) {
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid integer value '{}', using default: {}", value, defaultValue);
+            return defaultValue;
+        }
+    }
+    
+    private double parseDoubleWithDefault(String value, double defaultValue) {
+        if (value == null || value.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            logger.warn("Invalid double value '{}', using default: {}", value, defaultValue);
+            return defaultValue;
         }
     }
 }
