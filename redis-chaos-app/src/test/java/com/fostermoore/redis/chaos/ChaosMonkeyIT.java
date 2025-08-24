@@ -885,6 +885,63 @@ class ChaosMonkeyIT {
 
     @Test
     @Order(14)
+    @DisplayName("Comprehensive Node Failure Resilience Test")
+    @Timeout(value = 300)
+    void testComprehensiveNodeFailureResilience() {
+        logger.info("🔥 CHAOS-TEST: Comprehensive Node Failure Resilience - STARTING");
+        logger.info("This test will systematically fail masters and slaves to validate client resilience");
+        
+        Instant startTime = Instant.now();
+        
+        try {
+            // First, let's see what nodes we actually have
+            var allNodes = redisService.getClusterNodes();
+            logger.info("CHAOS-TEST: Current cluster topology:");
+            for (int i = 0; i < allNodes.size(); i++) {
+                var node = allNodes.get(i);
+                String address = node.get("address").toString();
+                String flags = node.get("flags").toString();
+                logger.info("  Node {}: {} [{}]", i + 1, address, flags);
+            }
+            
+            // Run comprehensive node failure test
+            var result = chaosOrchestrator.simulateComprehensiveNodeFailure(90); // 90 second comprehensive test
+            
+            Duration testTime = Duration.between(startTime, Instant.now());
+            
+            logger.info("CHAOS-TEST: Comprehensive Node Failure completed in {}ms", testTime.toMillis());
+            logger.info("CHAOS-TEST: Test success: {}", result.isSuccess());
+            logger.info("CHAOS-TEST: Initial topology - Masters: {}, Slaves: {}, Total: {}", 
+                result.getInitialMasters(), result.getInitialSlaves(), result.getInitialTotalNodes());
+            logger.info("CHAOS-TEST: Final health: {}, Final nodes: {}", 
+                result.isFinalHealth(), result.getFinalTotalNodes());
+            
+            // Log phase results
+            var phaseResults = result.getPhaseResults();
+            for (var entry : phaseResults.entrySet()) {
+                logger.info("CHAOS-TEST: Phase '{}' result: {}", entry.getKey(), 
+                    entry.getValue().getClass().getSimpleName());
+            }
+            
+            Assertions.assertTrue(result.isSuccess(), 
+                "Comprehensive node failure test should succeed with full recovery");
+            Assertions.assertTrue(result.isFinalHealth(), 
+                "Cluster should be healthy after comprehensive failure test");
+            Assertions.assertEquals(result.getInitialTotalNodes(), result.getFinalTotalNodes(), 
+                "All nodes should be recovered");
+                
+            logger.info("✅ CHAOS-TEST: Comprehensive Node Failure Resilience - COMPLETED");
+            
+        } catch (Exception e) {
+            Duration testTime = Duration.between(startTime, Instant.now());
+            logger.error("❌ CHAOS-TEST: Comprehensive Node Failure Resilience FAILED after {}ms - Error: {}", 
+                testTime.toMillis(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Test
+    @Order(15)
     @DisplayName("Cleanup and Final Health Check")
     @Timeout(value = 30)
     void testCleanupAndFinalHealthCheck() {

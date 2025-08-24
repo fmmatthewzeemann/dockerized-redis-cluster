@@ -12,7 +12,6 @@ volumes:
   redis_data-4: { name: redis_data-4 }
   redis_data-5: { name: redis_data-5 }
   redis_data-6: { name: redis_data-6 }
-  redis-insight-data: { name: redis-insight-data }
 
 x-redis-common: &redis-common
   image: redis:${REDIS_VERSION:-7-alpine}
@@ -212,29 +211,3 @@ services:
     command: /scripts/init-cluster.sh
     restart: "no"
     profiles: [init]
-
-  app:
-    image: python:${PYTHON_VERSION:-3.11-alpine}
-    container_name: redis-cluster-app
-    depends_on:
-      cluster-init: {condition: service_completed_successfully, required: false}
-    volumes:
-      - ./app:/usr/local/cluster-tester:z
-    working_dir: /usr/local/cluster-tester
-    entrypoint: /usr/local/cluster-tester/docker-entrypoint.sh
-    networks: [backend-net]
-    extra_hosts:
-      - "redis.localhost:host-gateway"
-    profiles: [app]
-
-  redis-insight:
-    image: redislabs/redisinsight:latest
-    container_name: redis-insight
-    ports:
-      - "5544:5540"
-    volumes:
-      - redis-insight-data:/db
-    networks: [backend-net]
-    extra_hosts:
-      - "redis.localhost:host-gateway"
-    profiles: [insight]
